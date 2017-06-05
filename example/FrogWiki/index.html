@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GE2E FrogWiki Example</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="A simple GE2E usage example">
+
+  <link rel="stylesheet" href="asset/style/frogwiki.css">
+  <script src="../../lib/tiny-xhr.js"></script>
+
+</head>
+<body>
+
+  <h1>FrogWiki Example</h1>
+  <h4>A simple GE2E usage example</h4>
+
+  <h2>Unit Tests</h2>
+  <pre></pre>
+
+  <script>!function () {
+let line = 1
+const
+    $out = document.querySelector('pre')
+  , logs = Array(12)
+  , log = (...messages) =>
+        messages.map( message => {
+            if ('string' !== typeof message)
+                return console.log(message) // eg a `config` object
+            logs.shift()
+            const lineno = '' + line++
+            logs.push(`${lineno.padStart(3-lineno.length)} ${message}`)
+            $out.innerHTML = logs.join('\n')
+        })
+
+//// Define promise-handlers for success and failure.
+  , success = data => {//console.log(data);
+        const
+            expect     = data.data
+          , actual     = data.response
+          , statusPass = expect.status === actual.status
+          , valuePass  =
+                'string' === typeof expect.value
+              ? expect.value === actual.value
+              : expect.value.test(actual.value)
+
+        //// Deal with a test which passes.
+        if (statusPass && valuePass)
+            log(`  ${actual.status}: ${actual.value}`)
+
+        //// Deal with a passing status, but a non-passing value.
+        else if (statusPass && ! valuePass)
+            log(`  EXPECT ${expect.status}: <b>${expect.value}</b>`
+               ,`  ACTUAL ${actual.status}: <b>${actual.value}</b>`
+               , expect.config, expect.opt)
+
+        //// Deal with a passing value, but a non-passing status.
+        else if (! statusPass && valuePass)
+            log(`  EXPECT <b>${expect.status}</b>: ${expect.value}`
+               ,`  ACTUAL <b>${actual.status}</b>: ${actual.value}`
+               , expect.config, expect.opt)
+
+        //// Deal with non-passing status and value.
+        else // must be `(! statusPass && ! valuePass)`
+            log(`  EXPECT <b>${expect.status}</b>: <b>${expect.value}</b>`
+               ,`  ACTUAL <b>${actual.status}</b>: <b>${actual.value}</b>`
+               , expect.config, expect.opt)
+        // data.headers() = parsed headers {Object}
+    }
+  , failure = error => {
+        if (error.message)
+            log(`  ERROR: line ${error.lineNumber} '${error.message}'`)
+        else
+            log(`  ERROR: ${error.status} ${error.statusText}`)
+        console.log(error)
+    }
+
+//// Define a function which returns unit tests.
+  , testFactory = config =>
+        () => { // return a function which takes no arguments
+            log(config.title)
+            const qdata = { action: config.action } // every query string has an action
+            if (null != config.millisleep) qdata.millisleep = 200 // optional, defaults to 200
+            let qs = []
+            for (let key in qdata) qs.push(`${key}=${qdata[key]}`) //@TODO url-encode
+            const opt = {
+                url:    'endpoint/?' + qs.join('&')
+              , method: config.method // 'GET' or 'POST'
+              , type:   'json'        // or 'form' or 'url'
+              , data:   'data'
+              , headers: {
+                //   "Authorization": "Basic " + btoa("login:pass")
+                }
+            }
+            return TINYXHR(opt, {
+                status: config.status // 'ok' signifies server-success
+              , value:  config.value  // a result, a success-message, or a failure-reason
+              , config
+              , opt
+            })
+        }
+
+
+
+
+//// Define our unit tests.
+  , ping = testFactory({
+        title:     'ping...'
+      , action:    'ping'
+      , millisleep: 200   // asks server to go sloooow, defaults to 200
+      , method:    'GET'
+      , status:    'ok'   // expected response.status
+      , value:     'pong' // expected response.value
+    })
+  , noAction = testFactory({
+        title:     'no-action...'
+      , action:    ''
+      , method:    'GET'
+      , status:    'warning'
+      , value:     /^\w+\.php:\d+: No 'action' specified\. Try 'action=show-actions'$/
+    })
+  , noSuchAction = testFactory({
+        title:     'no-such-action...'
+      , action:    'no-such-action'
+      , method:    'GET'
+      , status:    'warning'
+      , value:     /^\w+\.php:\d+: Action not recognised\. Try 'action=show-actions'$/
+    })
+  , pingPost = testFactory({
+        title:     'incorrect HTTP method...'
+      , action:    'ping'
+      , method:    'POST'
+      , status:    'warning'
+      , value:     /^\w+\.php:\d+: Must use 'GET' for 'ping'$/
+    })
+  , triggerPHPWarning = testFactory({
+        title:     'trigger-php-warning...'
+      , action:    'trigger-php-warning'
+      , method:    'GET'
+      , status:    'warning'
+      , value:     /^\w+\.php:\d+: Variable passed to each\(\) is not an array or object$/
+    })
+
+
+
+
+//// Run the unit tests.
+ping()
+   .then(success).then(noAction)
+   .then(success).then(noSuchAction)
+   .then(success).then(pingPost)
+   .then(success).then(triggerPHPWarning)
+   .then(success).catch(failure)
+
+  }()</script>
+
+</body>
+</html>
